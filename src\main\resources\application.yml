@@ -1,0 +1,21 @@
+spring:
+  application:
+    name: beacon-incident-api
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/beacon}
+    username: ${DATABASE_USER:beacon}
+    password: ${DATABASE_PASSWORD:beacon}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+server:
+  port: ${PORT:8080}
+
