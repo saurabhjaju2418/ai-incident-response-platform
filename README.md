@@ -6,39 +6,60 @@
 
 **Turn noisy alerts into a clear, reviewable response.**
 
-Java · Spring Boot · Kafka · OpenTelemetry
-
-![Project status](https://img.shields.io/badge/status-in%20progress-7a8b71)
+Java 21 · Spring Boot · PostgreSQL · Flyway · Docker
 
 </div>
 
-## Product scope
+Beacon is a runnable incident-management API. It accepts alert events, correlates repeats into incidents using a deterministic fingerprint, maintains an evidence timeline, and records response proposals behind a human approval step.
 
-Correlate alerts and logs, build an evidence-backed incident summary, and propose runbook actions for human approval.
+## Implemented
 
-## Architecture notes
+- POST /api/alerts: validate and ingest alert evidence; normalize source/title for deduplication; elevate incident severity when a more severe alert arrives.
+- GET /api/incidents: list incidents with evidence counts.
+- GET /api/incidents/{id}/evidence: return the incident evidence timeline.
+- PATCH /api/incidents/{id}/status: acknowledge or resolve an incident.
+- POST /api/incidents/{id}/proposals: create a pending response proposal.
+- POST /api/proposals/{id}/review: approve or reject a pending proposal. This endpoint records review only; it never executes an action.
+- PostgreSQL schema managed by Flyway, input validation, health/metrics endpoints, Docker Compose.
 
-Kafka ingestion; deduplicated incident fingerprints; provider-neutral model gateway; explicit approval boundary; append-only audit; OpenTelemetry traces.
+## Run
 
-### Data model sketch
+Requirements: Docker Compose. Start the API and database:
 
-    incidents(id, fingerprint, severity, status, opened_at) · evidence(id, incident_id, source, observed_at, payload_ref) · action_proposals(id, incident_id, approval_state, result)
+```bash
+docker compose up --build
+```
 
-## Stack
+Health check: http://localhost:8080/actuator/health
 
-Java · Spring Boot · Kafka · OpenTelemetry
+Example alert:
 
-## Build sequence
+```bash
+curl -X POST http://localhost:8080/api/alerts \
+  -H 'Content-Type: application/json' \
+  -d '{"title":"checkout latency elevated","source":"payments","summary":"p95 latency reached 2.4s","severity":"HIGH","occurredAt":"2026-10-01T08:00:00Z"}'
+```
 
-1. Alert ingestion and correlation
-2. Evidence timeline and incident API
-3. Grounded recommendation workflow
-4. Approval, audit, and safe runbook adapter
+## Architecture
 
-## Current status
+```text
+Alert source -> REST validation -> fingerprint correlation -> PostgreSQL
+                                             |                 |
+                                             +-> evidence timeline
+                                             +-> proposal -> human review
+```
 
-Public repository with an animated README. Product code is being built incrementally, one project at a time. This page records the planned product boundary and engineering milestones.
+The API is stateless; relational state lives in Postgres. Alert identity is currently a SHA-256 over normalized source and title, which is a transparent starter rule rather than a universal incident-correlation strategy.
+
+## Boundaries and next steps
+
+The repository currently does not include Kafka ingestion, authentication/authorization, an LLM provider, an executable runbook adapter, or production observability exporters. Recommendations are manually supplied proposal records; no model generates them. The explicit review state is a hard boundary: approval is stored, not executed. Next milestones are tenant identity, idempotent provider event IDs, correlation windows, Kafka adapter, grounded AI summaries with evidence references, and a separately permissioned runbook executor.
+
+## API configuration
+
+Set DATABASE_URL, DATABASE_USER, and DATABASE_PASSWORD to override the Compose defaults. Actuator exposes health, info, metrics, and Prometheus endpoints.
 
 ## License
 
-MIT.
+MIT. See [LICENSE](LICENSE).
+
